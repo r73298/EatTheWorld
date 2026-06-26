@@ -1,4 +1,4 @@
--- Eat the World - FluentPlus Edition (Fixed tonumber bug)
+-- Eat the World - FluentPlus Edition (Fixed tonumber bug + Simple Rewards + Fixed AutoUpgrade)
 -- Config save/load built into the GUI
 
 local Players = game:GetService("Players")
@@ -81,6 +81,7 @@ local Tabs = {
     Farming = Window:AddTab({ Title = "Farming", Icon = "wheat" }),
     Upgrades = Window:AddTab({ Title = "Upgrades", Icon = "arrow-up-circle" }),
     Webhooks = Window:AddTab({ Title = "Webhooks", Icon = "webhook" }),
+    Rewards = Window:AddTab({ Title = "Rewards", Icon = "gift" }),
     Config = Window:AddTab({ Title = "Config", Icon = "save" }),
     Credits = Window:AddTab({ Title = "Credits", Icon = "info" }),
 }
@@ -96,6 +97,8 @@ getgenv().AutoUpgradeSpeed = false
 getgenv().AutoUpgradeMultiplier = false
 getgenv().AutoUpgradeEatSpeed = false
 getgenv().TrackSize = false
+getgenv().AutoCollectRewards = false
+getgenv().AutoSpin = false
 getgenv().TeleportDelay = 1.0
 getgenv().SellAtAmount = 1000
 getgenv().AutoSellSlider = 1
@@ -183,28 +186,26 @@ function GetCubes()
     return num or 0
 end
 
--- FIXED: Wrapped gsub in parentheses
+-- ============================================
+-- FIXED: GetUpgradePrice using ItemInfo module
+-- No more Shop UI dependency!
+-- ============================================
+local ItemInfo = require(ReplicatedStorage:WaitForChild("ItemInfo"))
+
 function GetUpgradePrice(upgradeName)
-    local gui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not gui then return nil end
-    local screenGui = gui:FindFirstChild("ScreenGui")
-    if not screenGui then return nil end
-    local shop = screenGui:FindFirstChild("Shop")
-    if not shop then return nil end
-    local shopFrames = shop:FindFirstChild("ShopFrames")
-    if not shopFrames then return nil end
-    local upgrades = shopFrames:FindFirstChild("Upgrades")
-    if not upgrades then return nil end
-    local upgradeList = upgrades:FindFirstChild("UpgradeList")
-    if not upgradeList then return nil end
-    local upgradeFrame = upgradeList:FindFirstChild(upgradeName)
-    if not upgradeFrame then return nil end
-    local buyFrame = upgradeFrame:FindFirstChild("BuyFrame")
-    if not buyFrame then return nil end
-    local priceFrame = buyFrame:FindFirstChild("Price")
-    if not priceFrame then return nil end
-    local num = tonumber((priceFrame.Text:gsub(",", "")))  -- FIXED: extra parentheses
-    return num
+    local upgradesFolder = LocalPlayer:FindFirstChild("Upgrades")
+    if not upgradesFolder then return nil end
+    
+    local levelValue = upgradesFolder:FindFirstChild(upgradeName)
+    if not levelValue then return nil end
+    
+    local currentLevel = levelValue.Value
+    local upgradeData = ItemInfo.Upgrades[upgradeName]
+    if not upgradeData then return nil end
+    
+    -- priceFunction takes the NEXT level (current + 1)
+    local price = upgradeData.priceFunction(currentLevel + 1)
+    return price
 end
 
 function StopAllAutoUpgrades()
@@ -214,16 +215,26 @@ function StopAllAutoUpgrades()
     getgenv().AutoUpgradeEatSpeed = false
 end
 
+-- ============================================
+-- FIXED AUTO UPGRADE FUNCTIONS
+-- Uses ItemInfo priceFunction + player Upgrades level
+-- ============================================
 function AutoUpgradeMaxSize()
     getgenv().AutoUpgradeMaxSize = true
     while getgenv().AutoUpgradeMaxSize do
         local cubes = GetCubes()
         local price = GetUpgradePrice("MaxSize")
-        if price and cubes >= price then
-            ReplicatedStorage.Events.PurchaseEvent:FireServer("MaxSize")
-            task.wait(0.6)
-        else
+        
+        if price == nil then
             task.wait(0.5)
+            continue
+        end
+        
+        if cubes >= price then
+            ReplicatedStorage.Events.PurchaseEvent:FireServer("MaxSize")
+            task.wait(0.8) -- Wait for server to process + level to update
+        else
+            task.wait(0.3) -- Fast check when can't afford
         end
     end
 end
@@ -233,11 +244,17 @@ function AutoUpgradeSpeed()
     while getgenv().AutoUpgradeSpeed do
         local cubes = GetCubes()
         local price = GetUpgradePrice("Speed")
-        if price and cubes >= price then
-            ReplicatedStorage.Events.PurchaseEvent:FireServer("Speed")
-            task.wait(0.6)
-        else
+        
+        if price == nil then
             task.wait(0.5)
+            continue
+        end
+        
+        if cubes >= price then
+            ReplicatedStorage.Events.PurchaseEvent:FireServer("Speed")
+            task.wait(0.8)
+        else
+            task.wait(0.3)
         end
     end
 end
@@ -247,11 +264,17 @@ function AutoUpgradeMultiplier()
     while getgenv().AutoUpgradeMultiplier do
         local cubes = GetCubes()
         local price = GetUpgradePrice("Multiplier")
-        if price and cubes >= price then
-            ReplicatedStorage.Events.PurchaseEvent:FireServer("Multiplier")
-            task.wait(0.6)
-        else
+        
+        if price == nil then
             task.wait(0.5)
+            continue
+        end
+        
+        if cubes >= price then
+            ReplicatedStorage.Events.PurchaseEvent:FireServer("Multiplier")
+            task.wait(0.8)
+        else
+            task.wait(0.3)
         end
     end
 end
@@ -261,11 +284,17 @@ function AutoUpgradeEatSpeed()
     while getgenv().AutoUpgradeEatSpeed do
         local cubes = GetCubes()
         local price = GetUpgradePrice("EatSpeed")
-        if price and cubes >= price then
-            ReplicatedStorage.Events.PurchaseEvent:FireServer("EatSpeed")
-            task.wait(0.6)
-        else
+        
+        if price == nil then
             task.wait(0.5)
+            continue
+        end
+        
+        if cubes >= price then
+            ReplicatedStorage.Events.PurchaseEvent:FireServer("EatSpeed")
+            task.wait(0.8)
+        else
+            task.wait(0.3)
         end
     end
 end
@@ -283,6 +312,47 @@ function SendWebhook(message)
         req({ Url = url, Body = body, Method = "POST", Headers = { ["content-type"] = "application/json" } })
     end
 end
+
+-- ============================================
+-- AUTO REWARDS (Simple - Fire all every 3s)
+-- ============================================
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+local RewardEvent = Events:WaitForChild("RewardEvent")
+local SpinEvent = Events:WaitForChild("SpinEvent")
+
+-- Fire all rewards blindly every 3 seconds
+task.spawn(function()
+    while true do
+        task.wait(3)
+        
+        if not getgenv().AutoCollectRewards then continue end
+        
+        local timedRewards = LocalPlayer:FindFirstChild("TimedRewards")
+        if not timedRewards then continue end
+        
+        for _, reward in ipairs(timedRewards:GetChildren()) do
+            if reward:IsA("IntValue") or reward:IsA("NumberValue") then
+                pcall(function()
+                    RewardEvent:FireServer(reward)
+                end)
+                task.wait(0.3)
+            end
+        end
+    end
+end)
+
+-- Auto spin every 60 seconds
+task.spawn(function()
+    while true do
+        task.wait(60)
+        if getgenv().AutoSpin then
+            pcall(function()
+                SpinEvent:FireServer()
+            end)
+        end
+    end
+end)
 
 -- ============================================
 -- GUI - FARMING TAB
@@ -463,12 +533,89 @@ Tabs.Webhooks:AddToggle("TrackSize", {
 })
 
 -- ============================================
+-- GUI - REWARDS TAB (Simple)
+-- ============================================
+
+Tabs.Rewards:AddToggle("AutoCollectRewards", {
+    Title = "Auto Collect Timed Rewards",
+    Default = false,
+    Callback = function(Value)
+        getgenv().AutoCollectRewards = Value
+    end
+})
+
+Tabs.Rewards:AddToggle("AutoSpin", {
+    Title = "Auto Spin (Free Spin)",
+    Default = false,
+    Callback = function(Value)
+        getgenv().AutoSpin = Value
+    end
+})
+
+Tabs.Rewards:AddButton({
+    Title = "Collect Now",
+    Description = "Manually fire all rewards once",
+    Callback = function()
+        local timedRewards = LocalPlayer:FindFirstChild("TimedRewards")
+        if not timedRewards then
+            Fluent:Notify({ Title = "Error", Content = "TimedRewards not found!", Duration = 3 })
+            return
+        end
+        
+        for _, reward in ipairs(timedRewards:GetChildren()) do
+            if reward:IsA("IntValue") or reward:IsA("NumberValue") then
+                pcall(function()
+                    RewardEvent:FireServer(reward)
+                end)
+                task.wait(0.3)
+            end
+        end
+        
+        Fluent:Notify({ Title = "Rewards", Content = "Fired all rewards!", Duration = 3 })
+    end
+})
+
+Tabs.Rewards:AddButton({
+    Title = "Spin Now",
+    Description = "Manually spin once",
+    Callback = function()
+        pcall(function()
+            SpinEvent:FireServer()
+        end)
+        Fluent:Notify({ Title = "Spin", Content = "Spun!", Duration = 3 })
+    end
+})
+
+local rewardStatus = Tabs.Rewards:AddParagraph({
+    Title = "Reward Status",
+    Content = "Checking..."
+})
+
+task.spawn(function()
+    while true do
+        task.wait(3)
+        local timedRewards = LocalPlayer:FindFirstChild("TimedRewards")
+        if timedRewards then
+            local count = 0
+            for _, child in ipairs(timedRewards:GetChildren()) do
+                if child:IsA("IntValue") or child:IsA("NumberValue") then
+                    count = count + 1
+                end
+            end
+            rewardStatus:SetContent(count .. " rewards | Auto: " .. (getgenv().AutoCollectRewards and "ON" or "OFF"))
+        else
+            rewardStatus:SetContent("TimedRewards not found")
+        end
+    end
+end)
+
+-- ============================================
 -- GUI - CREDITS TAB
 -- ============================================
 
 Tabs.Credits:AddParagraph({
     Title = "Credits/Updates",
-    Content = "Owners: Kenniel, lordjuurd\nLatest Update: 5/25/24\n[+] Recoded AutoFarm AGAIN"
+    Content = "Owners: Kenniel, lordjuurd\nLatest Update: 6/26/26\n[+] Fixed AutoUpgrade using ItemInfo module"
 })
 
 Tabs.Credits:AddButton({
@@ -531,4 +678,4 @@ Fluent:Notify({
     Duration = 5
 })
 
-print("[EatTheWorld] FluentPlus loaded. All bugs fixed!")
+print("[EatTheWorld] FluentPlus loaded. AutoUpgrade fixed using ItemInfo!")
