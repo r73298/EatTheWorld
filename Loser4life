@@ -121,7 +121,7 @@ function AutoEat()
     getgenv().AutoEat = true
     while getgenv().AutoEat do
         LocalPlayer.Character.Events.Eat:FireServer()
-        task.wait(0.5)
+        task.wait(0)
     end
 end
 
