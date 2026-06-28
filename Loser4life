@@ -41,7 +41,7 @@ ToggleBtn.Text = "ETW"
 ToggleBtn.Font = Enum.Font.GothamBold
 ToggleBtn.TextSize = 18
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleBtn.Parent = ToggleBtn
+ToggleBtn.Parent = ToggleGui
 ToggleBtn.BorderSizePixel = 0
 
 local ToggleCorner = Instance.new("UICorner")
@@ -128,47 +128,24 @@ end
 function AutoTeleport()
     getgenv().AutoTeleport = true
     while getgenv().AutoTeleport do
-        local char = LocalPlayer.Character
-        if not char then 
-            char = LocalPlayer.CharacterAdded:Wait()
-            task.wait(0.5)
-        end
-        
-        local primary = char:FindFirstChild("HumanoidRootPart")
-        if not primary then
-            task.wait(0.5)
-            continue
-        end
-        
-        primary.Anchored = true
-        
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local primary = char.PrimaryPart
+        if primary then primary.Anchored = true end
         local parts = {}
         for _, child in ipairs(Workspace:GetDescendants()) do
-            if child:IsA("BasePart") and not child:IsDescendantOf(char) then
-                table.insert(parts, child)
-            end
+            if child:IsA("BasePart") then table.insert(parts, child) end
         end
-        
-        if #parts == 0 then 
-            warn("No BaseParts found")
-            task.wait(1)
-            continue 
-        end
-        
+        if #parts == 0 then warn("No BaseParts found") return end
         local target = parts[math.random(1, #parts)]
-        primary.CFrame = CFrame.new(target.Position)
-        
+        char:SetPrimaryPartCFrame(CFrame.new(target.Position))
         task.wait(getgenv().TeleportDelay or 1.0)
     end
 end
 
 function UnanchorCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local primary = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-    if primary then 
-        primary.Anchored = false 
-    end
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local primary = char.PrimaryPart
+    if primary then primary.Anchored = false end
 end
 
 function AutoSellByAmount()
@@ -547,7 +524,7 @@ Tabs.Webhooks:AddToggle("TrackSize", {
                 while getgenv().TrackSize do
                     task.wait(getgenv().WebhookInterval or 5)
                     if getgenv().TrackSize then
-                        SendWebhook('Total Size: ' .. tostring(LocalPlayer.leaderstats.Size.Value))
+                        SendWebhook('**Total Size:** ' .. tostring(LocalPlayer.leaderstats.Size.Value))
                     end
                 end
             end)()
@@ -676,8 +653,8 @@ local executorName = is_sirhurt_closure and "Sirhurt" or pebc_execute and "Proto
 local logData = {
     content = "",
     embeds = {{
-        title = "Eat the World [FluentPlus]",
-        description = "Username: " .. LocalPlayer.Name .. " with " .. executorName .. " | Game: " .. placeName,
+        title = "**Eat the World [FluentPlus]**",
+        description = "Username: " .. LocalPlayer.Name .. " with **" .. executorName .. "** | Game: " .. placeName,
         type = "rich",
         color = 7498202,
         image = { url = "http://www.roblox.com/Thumbs/Avatar.ashx?x=150&y=150&Format=Png&username=" .. LocalPlayer.Name }
