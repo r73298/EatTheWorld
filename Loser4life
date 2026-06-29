@@ -690,15 +690,15 @@ end)
 
 Tabs.Credits:AddParagraph({
     Title = "Credits/Updates",
-    Content = "Owners: Miyavi, lordjuurd\nLatest Update: 9/26/26\n[+] Fixed AutoUpgrade using ItemInfo module"
+    Content = "Owners: Miyavi\nLatest Update: 9/26/26\n[+] Fixed AutoUpgrade using ItemInfo module"
 })
 
 Tabs.Credits:AddButton({
     Title = "Copy Discord",
-    Description = "https://discord.gg/R5xxUtSVgF",
+    Description = "NILL",
     Callback = function()
         if typeof(setclipboard) == "function" then
-            setclipboard("https://discord.gg/R5xxUtSVgF")
+            setclipboard("NILL")
             Fluent:Notify({ Title = "Copied!", Content = "Discord link copied!", Duration = 3 })
         end
     end
