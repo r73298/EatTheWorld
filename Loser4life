@@ -17,8 +17,8 @@ repeat task.wait() until LocalPlayer.Character:FindFirstChild("HumanoidRootPart"
 local Fluent, SaveManager, InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/discoart/FluentPlus/refs/heads/main/Beta.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Eat the World",
-    SubTitle = "by Kenniel",
+    Title = "Cronkx Hub",
+    SubTitle = "V1",
     TabWidth = 140,
     Size = UDim2.fromOffset(450, 350),
     Acrylic = false,
@@ -104,6 +104,9 @@ getgenv().SellAtAmount = 1000
 getgenv().AutoSellSlider = 1
 getgenv().WebhookUrl = ""
 getgenv().WebhookInterval = 5
+getgenv().WebhookEnabled = false
+getgenv().TrackCategory = false
+getgenv().TrackDisconnection = false
 
 -- ============================================
 -- CORE FUNCTIONS (Defined BEFORE GUI)
@@ -213,6 +216,30 @@ function StopAllAutoUpgrades()
     getgenv().AutoUpgradeSpeed = false
     getgenv().AutoUpgradeMultiplier = false
     getgenv().AutoUpgradeEatSpeed = false
+end
+
+function SendWebhook(message)
+    if not getgenv().WebhookEnabled or getgenv().WebhookUrl == "" or getgenv().WebhookUrl == nil then
+        return
+    end
+    
+    local data = {
+        content = message
+    }
+    
+    local body = HttpService:JSONEncode(data)
+    local req = http_request or request or HttpPost or syn.request
+    
+    if req then
+        pcall(function()
+            req({
+                Url = getgenv().WebhookUrl,
+                Body = body,
+                Method = "POST",
+                Headers = { ["content-type"] = "application/json" }
+            })
+        end)
+    end
 end
 
 -- ============================================
@@ -492,6 +519,14 @@ Tabs.Upgrades:AddToggle("AutoUpgradeEatSpeed", {
 -- GUI - WEBHOOKS TAB
 -- ============================================
 
+Tabs.Webhooks:AddToggle("WebhookEnabled", {
+    Title = "Enable Webhooks",
+    Default = false,
+    Callback = function(Value)
+        getgenv().WebhookEnabled = Value
+    end
+})
+
 Tabs.Webhooks:AddInput("WebhookInput", {
     Title = "Webhook URL",
     Default = "",
@@ -504,13 +539,13 @@ Tabs.Webhooks:AddInput("WebhookInput", {
 
 Tabs.Webhooks:AddSlider("WebhookInterval", {
     Title = "Webhook Interval",
-    Default = 5,
+    Default = 1,
     Min = 1,
-    Max = 300,
+    Max = 10,
     Rounding = 0,
-    Suffix = " seconds",
+    Suffix = " minutes",
     Callback = function(Value)
-        getgenv().WebhookInterval = Value
+        getgenv().WebhookInterval = Value * 60
     end
 })
 
@@ -522,7 +557,7 @@ Tabs.Webhooks:AddToggle("TrackSize", {
         if Value then
             coroutine.wrap(function()
                 while getgenv().TrackSize do
-                    task.wait(getgenv().WebhookInterval or 5)
+                    task.wait(getgenv().WebhookInterval or 60)
                     if getgenv().TrackSize then
                         SendWebhook('**Total Size:** ' .. tostring(LocalPlayer.leaderstats.Size.Value))
                     end
@@ -531,6 +566,46 @@ Tabs.Webhooks:AddToggle("TrackSize", {
         end
     end
 })
+
+Tabs.Webhooks:AddToggle("TrackCategory", {
+    Title = "Track Category (Wallet + Upgrades)",
+    Default = false,
+    Callback = function(Value)
+        getgenv().TrackCategory = Value
+        if Value then
+            coroutine.wrap(function()
+                while getgenv().TrackCategory do
+                    task.wait(getgenv().WebhookInterval or 60)
+                    if getgenv().TrackCategory then
+                        local cubes = GetCubes()
+                        local maxSizePrice = GetUpgradePrice("MaxSize") or "N/A"
+                        local speedPrice = GetUpgradePrice("Speed") or "N/A"
+                        local multiplierPrice = GetUpgradePrice("Multiplier") or "N/A"
+                        local eatSpeedPrice = GetUpgradePrice("EatSpeed") or "N/A"
+                        
+                        local message = "```\n💰 WALLET: " .. tostring(cubes) .. " Cubes\n📈 AUTO MAX SIZE: " .. tostring(maxSizePrice) .. "\n⚡ AUTO SPEED: " .. tostring(speedPrice) .. "\n✖️ AUTO MULTIPLIER: " .. tostring(multiplierPrice) .. "\n🍴 AUTO EAT SPEED: " .. tostring(eatSpeedPrice) .. "\n```"
+                        
+                        SendWebhook(message)
+                    end
+                end
+            end)()
+        end
+    end
+})
+
+Tabs.Webhooks:AddToggle("TrackDisconnection", {
+    Title = "Track Disconnection",
+    Default = false,
+    Callback = function(Value)
+        getgenv().TrackDisconnection = Value
+    end
+})
+
+LocalPlayer.Parent:GetPropertyChangedSignal("Parent"):Connect(function()
+    if getgenv().TrackDisconnection and LocalPlayer.Parent == nil then
+        SendWebhook("❌ **DISCONNECTED** | Player: " .. LocalPlayer.Name)
+    end
+end)
 
 -- ============================================
 -- GUI - REWARDS TAB (Simple)
@@ -615,7 +690,7 @@ end)
 
 Tabs.Credits:AddParagraph({
     Title = "Credits/Updates",
-    Content = "Owners: Kenniel, lordjuurd\nLatest Update: 6/26/26\n[+] Fixed AutoUpgrade using ItemInfo module"
+    Content = "Owners: Miyavi, lordjuurd\nLatest Update: 9/26/26\n[+] Fixed AutoUpgrade using ItemInfo module"
 })
 
 Tabs.Credits:AddButton({
